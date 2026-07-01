@@ -19,37 +19,37 @@ We propose, fit, and compare several stochastic models of energy spot price. For
 Models are compared based on their model fit to the training data and their predictive performance for the validation dataset. The focus, however, is on the within-sample model fit, which investigates which model can most accurately represent the dynamics of energy spot price. Parameters are inferred within the Bayesian paradigm, which is well suited to handle models with hierarchical and complex structures. Inference is done within Stan, a probabilistic programming language which implements a Hamiltonian Monte Carlo (HMC) no-U-turn algorithm to efficiently sample from the targeted joint posterior distribution. All scripts related to this work can be found in the GitHub [repository](https://github.com/jordanbchilds/Stochastic-Models-of-Spot-Prices).
 
 All models combine a deterministic mean function and stochastic component. The mean function does not differ between models; however, its parameters are inferred with the stochastic component’s as one inference scheme, and so they can differ between models. We chose to model the spot prices directly (not on the log scale), allowing negative prices, a known spot-price phenomenon caused by periods of excess generation, often caused by high renewable output and an inability to shut down non-renewable generators due to operational constraints. Let $S_t$ denote the spot price at time $t$; the general form of the models is
-<div class="math">
+
 $$
 S_t = \Lambda_t + X_t,
 $$
-</div>
+
 where $\Lambda_t$ is the deterministic mean function, evaluated at $t$, and $X_t$ is the stochastic component. The form of the deterministic mean function is discussed first, and the stochastic components are introduced after.
 
 ## Mean function
 
 The data show seasonal trends in the spot price as a result of predictable changes in energy’s supply and demand. This trend should be incorporated into a model to improve predictive performance and not rely purely on the stochastic variation to predict spot price. The proposed mean function combines categorical indicators for day of the week and hour of the day, and a yearly trend modelled by a linear trend and a third order fourier series to capture the yearly variation. That is,
-<div class="math">
+
 $$
 \Lambda_t = \mu_0 + \frac{\mu_1}{8760} t + \beta_{A_t} + \gamma_{B_t} + \sum_{k=1}^3 \left[ \alpha_{1,k} \cos\left(\frac{2\pi k}{8760}t \right) + \alpha_{2,k} \sin \left( \frac{2\pi k}{8760} t \right) \right]
 $$
-</div>
+
 where $\mu_0$ is an overall mean and $\mu_1$ is the linear time trend. The variables $A_t$ and $B_t$ indicate the weekday and hour, respectively, and, therefore, $\beta_i$ and $\gamma_i$ are the daily and hourly effects on spot price. Lastly, the yearly trend in the data is captured by the Fourier series (and linear trend); the order of the series is limited to three to not over-fit to the training data.
 
 ## Mean-Reverting Process
 
 A mean-reverting stochastic process drifts towards a defined long-term mean, unlike a pure Brownian motion process whose value is entirely random; the process has a bounded variance in the time limit. In the energy market, mean-reversion is driven by a number of factors, including supply-demand balancing, weather normalisation and the balancing market. Mathematically, mean-reversion is achieved by incorporating a drift proportional to the negative of the process’s current value, i.e. inducing a positive movement if the current value is below the long-term mean and vice versa; the speed of reversion is controlled by a parameter, $\theta$. The process also includes a volatility parameter, $\sigma$. Here, we assume the long-term mean is zero, as the deterministic mean function, $\Lambda_t$, is intended to model the expected seasonality in spot price. The stochastic differential equation (SDE) defining the process is
-<div class="math">
+
 $$
 \text{d}X_t = -\theta X_t\text{d}t + \sigma \text{d}W_t.
 $$
-</div>
+
 The transition density for a mean-reverting process can be found in closed form, allowing the spot-price transition density to also be written in closed form.
-<div class="math">
+
 $$
 S_{t+\Delta t} | S_{t} = s_{t} \sim \text{N}\left(\Lambda_{t+\Delta t} + e^{-\theta \Delta t}\left(s_t - \Lambda_t \right), \frac{\sigma^2}{2\theta}\left(1 - e^{-2\theta\Delta t} \right)\right),
 $$
-</div>
+
 where $\Delta t$ is the time-step between observations. Modelling the spot price in hourly time units and having hourly data observations implies that $\Delta t=1$ and it is dropped from future equations. The closed form of the transition density allows the model likelihood to be calculated without approximation of the process, allowing for inference to proceed relatively easily. The closed form solution also allows exact forward-simulation of the sample path.
 
 ### Inference
@@ -70,16 +70,16 @@ The resulting posterior predictive plots can be seen in Figure 1. The model appe
 ## Mean-Reverting Jump Process
 
 Although mean-reversion captures the overall trend of the data, it is not capable of reproducing the large tails in spot-price distribution from Brownian stochasticity alone. Hence, we wish to introduce larger spikes and increased volatility into the process. This can be done by the inclusion of discontinuous jumps. Large jumps in spot price are a known phenomenon and can be seen clearly in this dataset. They can be caused by a range of issues such as power plant outages, errors in renewable generation forecasting, and changes in the price of gas. The SDE below describes a mean-reverting process with an additional component, denoted $J_t\text{d}N_t$. Where $J_t$ is a discontinuous jump at time $t$, and $N_t$ describes a Poisson process with constant rate $\lambda$. The Poisson process allows jumps in energy price to arrive randomly, reflecting large price spikes. The jump-size parameter is itself a random variable described by a distribution. Price spikes both increase and decrease the spot price and, hence, its range should be the whole real line. Reflecting this, jump sizes are assumed to be normally distributed, and the stochastic component of the model is
-<div class="math">
+
 $$
 \begin{align}
 \text{d}X_t &= -\theta X_t\text{d}t + \sigma \text{d}W_t + J_t\text{d}N_t, \\
 J_t &\sim \text{N}(\mu_J, \sigma_J^2).
 \end{align}
 $$
-</div>
+
 We assume that the time-step, $\Delta t = 1$hr, is small enough that at most one jump can occur within it. This assumption allows the transition density to be tractable, without the need for considering an infinite number of jumps or approximation. The transition density can then be written as a mixture distribution with weights given by the probability of a jump occurring, $p$,
-<div class="math">
+
 $$
 \begin{align}
 S_{t+1} | S_t=s_t &\sim (1 - p)\text{N}\left(\mu_X, \sigma_X^2\right) + p\text{N}\left(\mu_X + \mu_J, \sigma_X^2 + \sigma_J^2\right), \\
@@ -88,7 +88,7 @@ S_{t+1} | S_t=s_t &\sim (1 - p)\text{N}\left(\mu_X, \sigma_X^2\right) + p\text{N
 p &= \lambda.
 \end{align}
 $$
-</div>
+
 The likelihood is, therefore, also tractable and inference can proceed.
 
 ### Inference
@@ -110,14 +110,14 @@ The posterior predictives show wider 99% predictive intervals when compared to t
 ## Regime-Switching Diffusion Model
 
 Another modelling approach is to assume that the energy price is governed differently depending on whether the price is currently within a spike or whether it is in its usual (non-spike) range, referred to as a ‘base regime’. This distinction can be incorporated into a model by introducing a latent variable indicating the underlying state: base or spike. The base regime, $X^b_t$, is modelled using a mean-reverting component with discontinuous jumps following a Poisson process, while the spike regime, $X^s_t$, follows an independent mean-reverting process, with different parameters;
-<div class="math">
+
 $$
 \begin{align}
     \text{d}X_t^b &= -\theta_b X_t^b \text{d}t + \sigma_b \text{d}W_t^b + J_t\text{d}N_t, \\
     \text{d}X_t^s &= -\theta_s X_t^s \text{d}t + \sigma_s \text{d}W_t^s.
 \end{align}
 $$
-</div>
+
 The latent process, the unobserved regime, can be considered to be a Markov chain, whose current state, $Z_t$, depends only on the previous, $Z_{t-1}$. The chain is described by a transition matrix, whose probabilities are to be inferred. This type of model is also called a hidden Markov model and also falls into the category of state space models. The latent process adds some complexity to calculating the likelihood, where all paths of the underlying state space must be considered. However, this calculation can be simplified by using the forward algorithm. It iteratively calculates the probability of the current and the next state given the data up until that point. By using this algorithm, the likelihood can be calculated, and inference can proceed.
 
 ### Inference
@@ -140,7 +140,7 @@ The example one-step-ahead predictive density shows some indication of fat tails
 ## Stochastic Volatility
 
 The final model considered in this blog is a model which includes dynamic, time-varying volatility. The models so far have considered the volatility to be constant, although the regime-switching model allows the volatility to vary between regimes. Here, we propose a model where the volatility is considered stochastic and an unobserved latent process within the system. The log-volatility, $V_t$, is modelled by a mean-reverting process with discontinuous jumps described by a Poisson process with constant rate. The jumps in log-volatility are intended to propagate and increase volatility in the stochastic process $X_t$, allowing for large-tailed predictive distributions for the spot price. The model is,
-<div class="math">
+
 $$
 \begin{align}
     \text{d}X_t &= -\theta X_t\text{d}t + \sigma_t \text{d}W_t^X, \\
@@ -148,7 +148,7 @@ $$
     J_t &\sim \text{N}(\mu_J, \sigma_J^2).
 \end{align}
 $$
-</div>
+
 where $\sigma_t = e^{V_t}$ and the Browian motion processes, $\text{d}W_t^V$ and $\text{d}W_t^X$, are assumed to be independent. The jumps in log-volatility are, similarly to before, assumed to be normally distributed with mean and variance to be inferred, allowing jumps in both directions and letting the transition densities be tractable.
 
 ### Inference
